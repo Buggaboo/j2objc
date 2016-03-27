@@ -129,6 +129,7 @@ JAVA_PUBLIC_SOURCES_CORE = \
   java/lang/NullPointerException.java \
   java/lang/NumberFormatException.java \
   java/lang/OutOfMemoryError.java \
+  java/lang/Override.java \
   java/lang/Package.java \
   java/lang/Readable.java \
   java/lang/ReflectiveOperationException.java \
@@ -146,6 +147,7 @@ JAVA_PUBLIC_SOURCES_CORE = \
   java/lang/StringBuffer.java \
   java/lang/StringBuilder.java \
   java/lang/StringIndexOutOfBoundsException.java \
+  java/lang/SuppressWarnings.java \
   java/lang/System.java \
   java/lang/Thread.java \
   java/lang/ThreadDeath.java \
@@ -346,6 +348,7 @@ JAVA_PUBLIC_SOURCES_CORE = \
   java/util/regex/Pattern.java \
   java/util/regex/PatternSyntaxException.java \
   java/util/regex/Splitter.java \
+  javax/annotation/Generated.java \
   javax/annotation/PostConstruct.java \
   javax/annotation/PreDestroy.java \
   javax/annotation/Resources.java \
@@ -1342,13 +1345,6 @@ JAVA_SOURCES_ZIP = $(JAVA_PUBLIC_SOURCES_ZIP) $(JAVA_PRIVATE_SOURCES_ZIP)
 JAVA_SOURCES_SQL = $(JAVA_PUBLIC_SOURCES_SQL) $(JAVA_PRIVATE_SOURCES_SQL)
 JAVA_SOURCES_BEANS = $(JAVA_PUBLIC_SOURCES_BEANS) $(JAVA_PRIVATE_SOURCES_BEANS)
 JAVA_SOURCES_ANDROID = $(ANDROID_PUBLIC_SOURCES) $(ANDROID_PRIVATE_SOURCES)
-
-# These annotations have a SOURCE retention, and so should not be part of the runtime.
-# They need to be included in the jre_emul.jar, however.
-SOURCE_RETENTION_ANNOTATIONS = \
-  java/lang/Override.java \
-  java/lang/SuppressWarnings.java \
-  javax/annotation/Generated.java \
 
 JAVA_SOURCES = \
   $(JAVA_SOURCES_CORE) \
