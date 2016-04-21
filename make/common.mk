@@ -50,7 +50,7 @@ GEN_JAVA_DIR = $(BUILD_DIR)/java
 endif
 
 ifndef J2OBJC_ARCHS
-J2OBJC_ARCHS = macosx iphone iphone64 iphonev7s simulator simulator64
+J2OBJC_ARCHS = macosx iphone iphone64 watchv7k simulator simulator64
 endif
 
 # xcrun finds a specified tool in the current SDK /usr/bin directory.
@@ -94,7 +94,7 @@ endif
 endif
 DEBUGFLAGS := $(DEBUGFLAGS) -O$(OPTIMIZATION_LEVEL)
 
-CC_WARNINGS = -Wall -Werror -Wshorten-64-to-32 \
+CC_WARNINGS = -Wall -Werror -Wshorten-64-to-32 -Wimplicit-function-declaration \
   -Wmissing-field-initializers -Wno-unused-variable
 
 ifdef GCC_PREPROCESSOR_DEFINITIONS

@@ -26,7 +26,9 @@ import org.eclipse.jdt.core.dom.IVariableBinding;
 import org.eclipse.jdt.core.dom.Modifier;
 
 import java.lang.annotation.RetentionPolicy;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashSet;
@@ -53,9 +55,6 @@ public final class BindingUtil {
 
   // Not defined in JVM spec, but used by reflection support.
   public static final int ACC_ANONYMOUS = 0x8000;
-
-  // Used by JDT to mark default methods.
-  public static final int ACC_DEFAULT = 0x10000;
 
   // Class files can only use the lower 16 bits.
   public static final int ACC_FLAG_MASK = 0xFFFF;
@@ -211,6 +210,49 @@ public final class BindingUtil {
       return ((IAnnotationBinding) binding).getAnnotationType();
     }
     return null;
+  }
+
+  /**
+   * Gets the list of types that would be included in a ObjC declaration for
+   * this type. For example, if the type would be declared as "Foo<Bar, Baz> *"
+   * then the returned bounds are the bindings for the class Foo, and interfaces
+   * Bar and Baz. If one of the bounds is a class type, then that type will be
+   * the first element in the list.
+   * TODO(kstanger): Use this method in NameTable.
+   */
+  public static List<ITypeBinding> getTypeBounds(ITypeBinding type) {
+    if (!(type.isTypeVariable() || type.isCapture() || type.isWildcardType())) {
+      return Collections.singletonList(type);
+    }
+    List<ITypeBinding> bounds = new ArrayList<>();
+    collectBounds(type, bounds);
+    // Look for a class type and move it to the front of the list.
+    boolean classTypeFound = false;
+    for (int i = 0; i < bounds.size(); i++) {
+      if (!bounds.get(i).isInterface()) {
+        assert !classTypeFound : "Type has multiple class type bounds";
+        classTypeFound = true;
+        if (i > 0) {
+          bounds.add(0, bounds.remove(i));
+        }
+      }
+    }
+    return bounds;
+  }
+
+  private static boolean collectBounds(ITypeBinding type, List<ITypeBinding> bounds) {
+    ITypeBinding[] boundsArr = type.getTypeBounds();
+    if (boundsArr.length == 0) {
+      if (type.isWildcardType()) {
+        bounds.addAll(Arrays.asList(type.getInterfaces()));
+      }
+      bounds.add(type.getErasure());
+    } else {
+      for (ITypeBinding bound : boundsArr) {
+        collectBounds(bound, bounds);
+      }
+    }
+    return true;
   }
 
   /**
@@ -666,5 +708,76 @@ public final class BindingUtil {
     }
 
     return false;
+  }
+
+  /**
+   * Returns true if the binding is a Java 8 compound type. For example,
+   * Comparator.thenComparing() returns a lambda with a return type of
+   * "Comparator<T> & Serializable". Since there's no ITypeBinding
+   * isCompound(), we rely on the JDT returning an empty string for the
+   * type's qualified name.
+   */
+  public static boolean isCompound(ITypeBinding binding) {
+    return binding.isInterface() && binding.getQualifiedName().isEmpty();
+  }
+
+  /**
+   * Dumps the results from all methods in ITypeBinding to System.out.
+   * Used only when debugging.
+   */
+  public static void dumpTypeBinding(ITypeBinding binding) {
+    System.out.println("dump type: " + binding.getName());
+    System.out.println("  getBinaryName: " + binding.getBinaryName());
+    System.out.println("  getClass: " + binding.getClass());
+    System.out.println("  getComponentType: " + binding.getComponentType());
+    dumpArray("  getDeclaredTypes:", binding.getDeclaredTypes());
+    System.out.println("  getDeclaringClass: " + binding.getDeclaringClass());
+    System.out.println("  getElementType: " + binding.getElementType());
+    System.out.println("  getErasure: " + binding.getErasure());
+    System.out.println("  getGenericTypeOfWildcardType: " + binding.getGenericTypeOfWildcardType());
+    dumpArray("  getInterfaces:", binding.getInterfaces());
+    System.out.println("  getKey: " + binding.getKey());
+    System.out.println("  getModifiers:0x" + Integer.toHexString(binding.getModifiers()));
+    System.out.println("  getName: " + binding.getName());
+    System.out.println("  getPackage: " + binding.getPackage());
+    System.out.println("  getQualifiedName: " + binding.getQualifiedName());
+    System.out.println("  getSuperclass: " + binding.getSuperclass());
+    dumpArray("  getTypeArguments:", binding.getTypeArguments());
+    dumpArray("  getTypeBounds:", binding.getTypeBounds());
+    System.out.println("  getTypeDeclaration: " + binding.getTypeDeclaration());
+    dumpArray("  getTypeParameters:", binding.getTypeParameters());
+    System.out.println("  getWildcard: " + binding.getWildcard());
+    System.out.println("  isAnnotation: " + binding.isAnnotation());
+    System.out.println("  isAnonymous: " + binding.isAnonymous());
+    System.out.println("  isArray: " + binding.isArray());
+    System.out.println("  isCapture: " + binding.isCapture());
+    System.out.println("  isClass: " + binding.isClass());
+    System.out.println("  isEnum: " + binding.isEnum());
+    System.out.println("  isFromSource: " + binding.isFromSource());
+    System.out.println("  isGenericType: " + binding.isGenericType());
+    System.out.println("  isInterface: " + binding.isInterface());
+    System.out.println("  isLocal: " + binding.isLocal());
+    System.out.println("  isMember: " + binding.isMember());
+    System.out.println("  isNested: " + binding.isNested());
+    System.out.println("  isNullType: " + binding.isNullType());
+    System.out.println("  isParameterizedType: " + binding.isParameterizedType());
+    System.out.println("  isPrimitive: " + binding.isPrimitive());
+    System.out.println("  isRawType: " + binding.isRawType());
+    System.out.println("  isSynthetic: " + binding.isSynthetic());
+    System.out.println("  isTopLevel: " + binding.isTopLevel());
+    System.out.println("  isTypeVariable: " + binding.isTypeVariable());
+    System.out.println("  isUpperbound: " + binding.isUpperbound());
+    System.out.println("  isWildcardType: " + binding.isWildcardType());
+  }
+
+  private static void dumpArray(String description, ITypeBinding[] array) {
+    System.out.print(description + " [");
+    for (int i = 0; i < array.length; i++) {
+      if (i > 0) {
+        System.out.print(", ");
+      }
+      System.out.print(array[i].getName());
+    }
+    System.out.println("]");
   }
 }

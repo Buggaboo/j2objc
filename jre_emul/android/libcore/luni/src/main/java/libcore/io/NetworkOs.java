@@ -391,8 +391,8 @@ public final class NetworkOs {
       }
 
       // Convert each IP address into a Java byte array.
-      struct sockaddr_storage address = *(struct sockaddr_storage *) ai->ai_addr;
-      JavaNetInetAddress *inetAddress = sockaddrToInetAddress(&address, NULL);
+      struct sockaddr_storage *address = (struct sockaddr_storage *) ai->ai_addr;
+      JavaNetInetAddress *inetAddress = sockaddrToInetAddress(address, NULL);
       if (!inetAddress) {
         freeaddrinfo(addressList);
         return nil;
@@ -528,11 +528,12 @@ public final class NetworkOs {
         addr = addr->ifa_next;
       }
     }
-    freeifaddrs(interfaces);
     if (!sinAddress) {
+      freeifaddrs(interfaces);
       LibcoreIoPosix_throwErrnoExceptionWithNSString_withInt_(msg, originalError);
     }
     IOSByteArray *byteArray = [IOSByteArray arrayWithBytes:(jbyte *)sinAddress count:4];
+    freeifaddrs(interfaces);
     return JavaNetInetAddress_getByAddressWithNSString_withByteArray_withInt_(nil, byteArray, 0);
   ]-*/;
 

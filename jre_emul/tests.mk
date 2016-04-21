@@ -52,7 +52,10 @@ SUPPORT_SOURCES = \
     libcore/java/nio/charset/OldCharset_AbstractTest.java \
     libcore/java/util/ServiceLoaderTestInterface.java \
     libcore/java/util/zip/AbstractZipFileTest.java \
+    libcore/javax/net/ssl/TestSSLContext.java \
     libcore/util/SerializationTester.java \
+    okio/MockSink.java \
+    okio/TestUtil.java \
     org/apache/harmony/beans/tests/support/MisprintBean.java \
     org/apache/harmony/beans/tests/support/MisprintEvent.java \
     org/apache/harmony/beans/tests/support/MisprintListenerr.java \
@@ -206,6 +209,7 @@ TEST_SOURCES := \
     com/google/j2objc/ArrayTest.java \
     com/google/j2objc/AssertTest.java \
     com/google/j2objc/ClassTest.java \
+    com/google/j2objc/LinkedListTest.java \
     com/google/j2objc/MemoryTest.java \
     com/google/j2objc/PackageTest.java \
     com/google/j2objc/ThrowableTest.java \
@@ -322,6 +326,7 @@ TEST_SOURCES := \
     libcore/java/net/ServerSocketTest.java \
     libcore/java/net/SocketTest.java \
     libcore/java/net/URITest.java \
+    libcore/java/net/URLConnectionTest.java \
     libcore/java/net/UrlEncodingTest.java \
     libcore/java/net/URLStreamHandlerFactoryTest.java \
     libcore/java/net/URLTest.java \
@@ -371,6 +376,16 @@ TEST_SOURCES := \
     libcore/java/util/zip/ZipOutputStreamTest.java \
     libcore/javax/xml/parsers/DocumentBuilderTest.java \
     libcore/net/url/UrlUtilsTest.java \
+    okio/AsyncTimeoutTest.java \
+    okio/BufferedSinkTest.java \
+    okio/BufferedSourceTest.java \
+    okio/BufferTest.java \
+    okio/ByteStringTest.java \
+    okio/OkioTest.java \
+    okio/RealBufferedSinkTest.java \
+    okio/RealBufferedSourceTest.java \
+    okio/SegmentSharingTest.java \
+    okio/Utf8Test.java \
     org/apache/harmony/archive/tests/java/util/zip/CRC32Test.java \
     org/apache/harmony/beans/tests/java/beans/BeanDescriptorTest.java \
     org/apache/harmony/beans/tests/java/beans/EventSetDescriptorTest.java \
@@ -757,7 +772,7 @@ endif
 SUPPORT_LIB = $(TESTS_DIR)/libtest-support.a
 TEST_BIN = $(TESTS_DIR)/jre_unit_tests
 
-TRANSLATE_ARGS = -classpath $(JUNIT_DIST_JAR) -Werror -sourcepath $(TEST_SRC):$(GEN_JAVA_DIR) \
+TRANSLATE_ARGS = -q -classpath $(JUNIT_DIST_JAR) -Werror -sourcepath $(TEST_SRC):$(GEN_JAVA_DIR) \
     --extract-unsequenced -encoding UTF-8 \
     --prefixes Tests/resources/prefixes.properties
 TRANSLATE_SOURCES = $(SUPPORT_SOURCES) $(TEST_SOURCES) $(SUITE_SOURCES) $(ALL_TESTS_CLASS).java
@@ -840,8 +855,14 @@ $(RESOURCES_DEST_DIR)/%: $(HARMONY_TEST_RESOURCES_ROOT)/%
 	@mkdir -p `dirname $@`
 	@cp $< $@
 
+# A bug in make 3.81 causes subprocesses to inherit a generous amount of stack.
+# This distorts the fact that the default stack size is 8 MB for a 64-bit OS X
+# binary. Work around with ulimit override.
+#
+# See http://stackoverflow.com/questions/16279867/gmake-change-the-stack-size-limit
+# and https://savannah.gnu.org/bugs/?22010
 run-tests: link resources $(TEST_BIN) run-initialization-test run-core-size-test
-	@$(TEST_BIN) org.junit.runner.JUnitCore $(ALL_TESTS_CLASS)
+	@ulimit -s 8192 && $(TEST_BIN) org.junit.runner.JUnitCore $(ALL_TESTS_CLASS)
 
 run-initialization-test: $(TESTS_DIR)/jreinitialization
 	@$(TESTS_DIR)/jreinitialization > /dev/null 2>&1
@@ -979,7 +1000,7 @@ $(TESTS_DIR)/core_plus_concurrent:
 
 $(TESTS_DIR)/core_plus_channels:
 	@mkdir -p $(@D)
-	../dist/j2objcc -ljre_channels -ljre_net -ljre_util -o $@ -ObjC
+	../dist/j2objcc -ljre_channels -ljre_net -ljre_security -ljre_util -o $@ -ObjC
 
 $(TESTS_DIR)/core_plus_security:
 	@mkdir -p $(@D)
@@ -987,11 +1008,11 @@ $(TESTS_DIR)/core_plus_security:
 
 $(TESTS_DIR)/core_plus_ssl:
 	@mkdir -p $(@D)
-	../dist/j2objcc -ljre_ssl -ljre_net -ljre_security -ljre_util -o $@ -ObjC
+	../dist/j2objcc -ljre_ssl -ljre_security -ljre_net -ljre_util -o $@ -ObjC
 
 $(TESTS_DIR)/core_plus_xml:
 	@mkdir -p $(@D)
-	../dist/j2objcc -ljre_xml -ljre_net -o $@ -ObjC
+	../dist/j2objcc -ljre_xml -ljre_net -ljre_security -o $@ -ObjC
 
 $(TESTS_DIR)/core_plus_zip:
 	@mkdir -p $(@D)
@@ -1007,4 +1028,4 @@ $(TESTS_DIR)/core_plus_beans:
 
 $(TESTS_DIR)/core_plus_android_util:
 	@mkdir -p $(@D)
-	../dist/j2objcc -landroid_util -ljre_net -ljre_util -ljre_concurrent -o $@ -ObjC
+	../dist/j2objcc -landroid_util -ljre_net -ljre_util -ljre_concurrent -ljre_security -o $@ -ObjC
