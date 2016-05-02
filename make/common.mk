@@ -42,6 +42,11 @@ ARCH_BUILD_MACOSX_DIR = $(ARCH_BUILD_DIR)/macosx
 ARCH_LIB_MACOSX_DIR = $(ARCH_LIB_DIR)/macosx
 DIST_LIB_MACOSX_DIR = $(DIST_LIB_DIR)/macosx
 
+# Appletv library dirs.
+ARCH_BUILD_TV_DIR = $(ARCH_BUILD_DIR)/appletvos
+ARCH_LIB_TV_DIR = $(ARCH_LIB_DIR)/appletvos
+DIST_LIB_TV_DIR = $(DIST_LIB_DIR)/appletvos
+
 ifndef GEN_OBJC_DIR
 GEN_OBJC_DIR = $(BUILD_DIR)/objc
 endif
@@ -49,8 +54,15 @@ ifndef GEN_JAVA_DIR
 GEN_JAVA_DIR = $(BUILD_DIR)/java
 endif
 
+TVOS_AVAILABLE = \
+  $(shell if xcodebuild -version -sdk appletvos >/dev/null 2>&1; \
+  then echo "YES"; else echo "NO"; fi)
+
 ifndef J2OBJC_ARCHS
 J2OBJC_ARCHS = macosx iphone iphone64 watchv7k simulator simulator64
+ifeq ($(TVOS_AVAILABLE), YES)
+J2OBJC_ARCHS += appletvos appletvsimulator
+endif
 endif
 
 # xcrun finds a specified tool in the current SDK /usr/bin directory.
@@ -126,6 +138,13 @@ STATIC_ANALYZER_FLAGS = \
   -Xclang -analyzer-disable-checker -Xclang security.insecureAPI.strcpy \
   -Xclang -analyzer-checker -Xclang security.insecureAPI.vfork \
   --analyze
+
+ifeq ($(findstring clean,$(notdir $(MAKECMDGOALS))),clean)
+IS_CLEAN_GOAL = 1
+endif
+ifeq ($(findstring test,$(notdir $(MAKECMDGOALS))),test)
+IS_TEST_GOAL = 1
+endif
 
 # Avoid bash 'arument list too long' errors.
 # See http://stackoverflow.com/questions/512567/create-a-file-from-a-large-makefile-variable

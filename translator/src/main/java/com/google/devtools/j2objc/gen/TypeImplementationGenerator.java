@@ -318,7 +318,7 @@ public class TypeImplementationGenerator extends TypeGenerator {
       if (returnType.isPrimitive()) {
         print("return ");
       } else {
-        printf("return (%s) ", nameTable.getSpecificObjCType(returnType));
+        printf("return (%s) ", nameTable.getObjCType(returnType));
       }
     }
     print(function.getJniSignature());

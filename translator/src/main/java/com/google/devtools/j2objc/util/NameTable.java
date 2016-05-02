@@ -37,7 +37,6 @@ import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -740,16 +739,16 @@ public class NameTable {
    * Convert a Java type to an equivalent Objective-C type with type variables
    * resolved to their bounds.
    */
-  public String getSpecificObjCType(ITypeBinding type) {
-    return getObjCTypeInner(type, null, true);
+  public String getObjCType(ITypeBinding type) {
+    return getObjCTypeInner(type, null);
   }
 
-  public String getSpecificObjCType(IVariableBinding var) {
+  public String getObjCType(IVariableBinding var) {
     String qualifiers = null;
     if (var instanceof GeneratedVariableBinding) {
       qualifiers = ((GeneratedVariableBinding) var).getTypeQualifiers();
     }
-    return getObjCTypeInner(var.getType(), qualifiers, true);
+    return getObjCTypeInner(var.getType(), qualifiers);
   }
 
   /**
@@ -757,7 +756,7 @@ public class NameTable {
    */
   public String getJniType(ITypeBinding type) {
     if (type.isPrimitive()) {
-      return getObjCType(type);
+      return getPrimitiveObjCType(type);
     }
     if (type.isArray()) {
       return "jarray";
@@ -771,15 +770,7 @@ public class NameTable {
     return "jobject";
   }
 
-  /**
-   * Convert a Java type to an equivalent Objective-C type with type variables
-   * converted to "id" regardless of their bounds.
-   */
-  public String getObjCType(ITypeBinding type) {
-    return getObjCTypeInner(type, null, false);
-  }
-
-  private String getObjCTypeInner(ITypeBinding type, String qualifiers, boolean expandBounds) {
+  private String getObjCTypeInner(ITypeBinding type, String qualifiers) {
     String objCType;
     if (type instanceof PointerTypeBinding) {
       String pointeeQualifiers = null;
@@ -790,22 +781,12 @@ public class NameTable {
           qualifiers = qualifiers.substring(idx + 1);
         }
       }
-      objCType = getObjCTypeInner(
-          ((PointerTypeBinding) type).getPointeeType(), pointeeQualifiers, expandBounds);
+      objCType = getObjCTypeInner(((PointerTypeBinding) type).getPointeeType(), pointeeQualifiers);
       objCType = objCType.endsWith("*") ? objCType + "*" : objCType + " *";
-    } else if (type.isTypeVariable() || type.isCapture() || type.isWildcardType()) {
-      if (expandBounds) {
-        objCType = constructObjCType(BindingUtil.getTypeBounds(type));
-      } else {
-        objCType = ID_TYPE;
-      }
-    } else if (BindingUtil.isCompound(type)) {
-      // TODO(kstanger): Handle compound types in BindingUtil.getTypeBounds().
-      objCType = constructObjCType(Arrays.asList(type.getInterfaces()));
     } else if (type.isPrimitive()) {
       objCType = getPrimitiveObjCType(type);
     } else {
-      objCType = constructObjCType(Collections.singletonList(type));
+      objCType = constructObjCType(BindingUtil.getTypeBounds(type));
     }
     if (qualifiers != null) {
       qualifiers = qualifiers.trim();
@@ -820,7 +801,6 @@ public class NameTable {
     String classType = null;
     List<String> interfaces = new ArrayList<>();
     for (ITypeBinding type : types) {
-      type = type.getErasure();
       if (typeEnv.isIdType(type) || typeEnv.isJavaVoidType(type)) {
         continue;
       }
@@ -892,6 +872,12 @@ public class NameTable {
     }
 
     // Use camel-cased package+class name.
+    if (BindingUtil.isIntersectionType(binding)) {
+      ITypeBinding[] interfaces = binding.getInterfaces();
+      if (interfaces.length > 0) {
+        return getFullName(interfaces[0]);
+      }
+    }
     return getPrefix(binding.getPackage()) + binding.getName();
   }
 
