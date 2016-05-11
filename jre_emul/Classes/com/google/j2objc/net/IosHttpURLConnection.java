@@ -577,7 +577,7 @@ public class IosHttpURLConnection extends HttpURLConnection {
     
     for (CFIndex i=0; i<count; i++) {
       SecCertificateRef certificate = SecTrustGetCertificateAtIndex(serverTrust, i);
-      NSData* remoteCertificateData = SecCertificateCopyData(certificate);
+      NSData* remoteCertificateData = (__bridge NSData *) SecCertificateCopyData(certificate);
       IOSByteArray* rawCert = [IOSByteArray arrayWithBytes:[remoteCertificateData bytes] count:[remoteCertificateData length]];
       [self addToCertificateListWithByteArray:rawCert];
     }
