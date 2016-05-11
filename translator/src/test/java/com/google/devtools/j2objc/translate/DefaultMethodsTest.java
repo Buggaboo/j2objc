@@ -81,10 +81,12 @@ public class DefaultMethodsTest extends GenerationTest {
     String translation = translateSourceFile(
         "interface Foo { default int f(int y) { return y + 1; } }"
         + "class Bar implements Foo {"
+        + "  public Bar(int x) { int i = Foo.super.f(x); }"
         + "  public int f(int y) { return Foo.super.f(y) + 1; }"
         + "}", "Test", "Test.m");
 
-    assertTranslatedLines(translation, "return Foo_fWithInt_(self, y) + 1;");
+    assertTranslation(translation, "jint i = Foo_fWithInt_(self, x);");
+    assertTranslation(translation, "return Foo_fWithInt_(self, y) + 1;");
   }
 
   public void testBasicDefaultMethodUsage() throws IOException {
@@ -401,5 +403,20 @@ public class DefaultMethodsTest extends GenerationTest {
     String source = "interface A { default Class<?> type() { return getClass(); } }";
     String impl = translateSourceFile(source, "Test", "Test.m");
     assertTranslatedLines(impl, "IOSClass *A_type(id<A> self) {", "return [self getClass];", "}");
+  }
+
+  public void testDefaultMethodWithMultipleSelectors() throws IOException {
+    addSourceFile("interface A <T> { void foo(T t); }", "A.java");
+    addSourceFile("interface B { void foo(String s); }", "B.java");
+    addSourceFile("interface C extends A<String>, B { default void foo(String s) {} }", "C.java");
+    addSourceFile("class D implements C {}", "D.java");
+    String headerC = translateSourceFile("C", "C.h");
+    String implD = translateSourceFile("D", "D.m");
+    assertTranslation(headerC, "- (void)fooWithId:(NSString *)s;");
+    assertTranslation(headerC, "- (void)fooWithNSString:(NSString *)s;");
+    assertTranslatedLines(implD,
+        "- (void)fooWithId:(NSString *)arg0 {", "C_fooWithNSString_(self, arg0);", "}");
+    assertTranslatedLines(implD,
+        "- (void)fooWithNSString:(NSString *)arg0 {", "C_fooWithNSString_(self, arg0);", "}");
   }
 }
