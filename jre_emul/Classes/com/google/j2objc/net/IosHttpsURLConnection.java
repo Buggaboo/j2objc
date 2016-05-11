@@ -60,14 +60,23 @@ public class IosHttpsURLConnection extends HttpsURLConnection {
     return new Certificate[0];
   }
 
+  // Delegate methods.
   @Override
   public Certificate[] getServerCertificates() throws SSLPeerUnverifiedException {
-    // TODO(tball): implement
-    logger.severe("HttpsURLConnection.getServerCertificates() not implemented");
-    return new Certificate[0];
+    if (connected) { // useful?
+      if (getURL().getHost().startsWith("http://")) {
+        throw new SSLPeerUnverifiedException("The http protocol does not support certificates");
+      }
+    
+      List<Certificate> certificates = delegate.certificates;
+      if (certificates != null && !certificates.isEmpty())
+        return (Certificate[]) certificates.toArray();
+      else
+        return null;
+    }else {
+      throw new SSLPeerUnverifiedException("The certificates are unavailable before the connection is set");
+    }
   }
-
-  // Delegate methods.
 
   @Override public void connect() throws IOException {
     connected = true;
