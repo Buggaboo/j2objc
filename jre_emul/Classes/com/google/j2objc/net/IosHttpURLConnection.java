@@ -565,6 +565,8 @@ public class IosHttpURLConnection extends HttpURLConnection {
   
   private void addToCertificateList(final byte[] rawCert) throws CertificateException {
     ByteArrayInputStream certificateInputStream = new ByteArrayInputStream(rawCert);
+    // TODO remove, this is purely for debugging
+    System.out.println(String.format("raw certificate: %s", new String(rawCert)));
     certificates.add(certificateFactory.generateCertificate(certificateInputStream));
   }
   
@@ -578,9 +580,11 @@ public class IosHttpURLConnection extends HttpURLConnection {
     for (CFIndex i=0; i<count; i++) {
       SecCertificateRef certificate = SecTrustGetCertificateAtIndex(serverTrust, i);
       NSData* remoteCertificateData = (__bridge NSData *) SecCertificateCopyData(certificate);
-      IOSByteArray* rawCert = [IOSByteArray arrayWithBytes:[remoteCertificateData bytes] count:[remoteCertificateData length]];
+      IOSByteArray* rawCert = [IOSByteArray arrayWithNSData:remoteCertificateData];
       [self addToCertificateListWithByteArray:rawCert];
     }
+    
+    completionHandler(NSURLSessionAuthChallengeUseCredential, [NSURLCredential credentialForTrust:serverTrust]);
   }]-*/
 
   private void addHeader(String k, String v) {
