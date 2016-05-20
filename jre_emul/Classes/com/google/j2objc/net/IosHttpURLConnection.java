@@ -32,7 +32,6 @@ import java.net.URL;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
 import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -552,7 +551,7 @@ public class IosHttpURLConnection extends HttpURLConnection {
   }]-*/
   
 
-  protected List<X509Certificate> certificates = new ArrayList<X509Certificate>();
+  protected List<Certificate> certificates = new ArrayList<Certificate>();
   private static CertificateFactory certificateFactory = null;
   
   static {
@@ -566,7 +565,7 @@ public class IosHttpURLConnection extends HttpURLConnection {
   
   private void addToCertificateList(final byte[] rawCert) throws CertificateException {
     ByteArrayInputStream certificateInputStream = new ByteArrayInputStream(rawCert);
-    certificates.add((X509Certificate)certificateFactory.generateCertificate(certificateInputStream));
+    certificates.add((Certificate)certificateFactory.generateCertificate(certificateInputStream));
   }
   
   /*-[- (void)URLSession:(NSURLSession *)session
