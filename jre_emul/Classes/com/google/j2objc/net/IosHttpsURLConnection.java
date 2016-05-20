@@ -24,6 +24,7 @@ import java.net.ProtocolException;
 import java.net.URL;
 import java.security.Permission;
 import java.security.cert.Certificate;
+import java.security.cert.X509Certificate;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
@@ -66,18 +67,14 @@ public class IosHttpsURLConnection extends HttpsURLConnection {
     if (getURL().getHost().startsWith("http://")) {
       throw new SSLPeerUnverifiedException("The http protocol does not support certificates");
     }
-    
-    if (!connected) {
-      throw new SSLPeerUnverifiedException("The certificates are unavailable before the connection is set");
-    }
-    
-    List<Certificate> certificates = delegate.certificates;
+      
+    List<X509Certificate> certificates = delegate.certificates;
     
     if (certificates != null && !certificates.isEmpty()) {
       return (Certificate[]) certificates.toArray();
     }
     
-    return null;
+    throw new SSLPeerUnverifiedException("The certificates are unavailable");
   }
 
   @Override public void connect() throws IOException {
