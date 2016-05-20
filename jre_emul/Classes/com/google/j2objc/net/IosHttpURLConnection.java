@@ -565,7 +565,8 @@ public class IosHttpURLConnection extends HttpURLConnection {
   
   private void addToCertificateList(final byte[] rawCert) throws CertificateException {
     ByteArrayInputStream certificateInputStream = new ByteArrayInputStream(rawCert);
-    certificates.add((Certificate)certificateFactory.generateCertificate(certificateInputStream));
+    Certificate certificate = (Certificate) certificateFactory.generateCertificate(certificateInputStream);
+    certificates.add(certificate);
   }
   
   /*-[- (void)URLSession:(NSURLSession *)session

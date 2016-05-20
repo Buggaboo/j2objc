@@ -70,7 +70,7 @@ public class IosHttpsURLConnection extends HttpsURLConnection {
     List<Certificate> certificates = delegate.certificates;
     
     if (certificates != null && !certificates.isEmpty()) {
-      return (Certificate[]) certificates.toArray();
+      return certificates.toArray(new Certificate[certificates.size()]);
     }
     
     throw new SSLPeerUnverifiedException("The certificates are unavailable");
