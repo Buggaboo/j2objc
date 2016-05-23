@@ -73,7 +73,7 @@ public class IosHttpsURLConnection extends HttpsURLConnection {
       return certificates.toArray(new Certificate[certificates.size()]);
     }
     
-    throw new SSLPeerUnverifiedException("The certificates are unavailable");
+    return null;
   }
 
   @Override public void connect() throws IOException {
