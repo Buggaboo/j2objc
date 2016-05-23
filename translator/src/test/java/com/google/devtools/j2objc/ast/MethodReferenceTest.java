@@ -96,6 +96,33 @@ public class MethodReferenceTest extends GenerationTest {
     assertTranslation(impl, "return [((NSString *) nil_chk(a)) compareToWithId:b];");
   }
 
+  public void testReferenceToInstanceMethodOfGenericType() throws IOException {
+    String source = "interface BiConsumer<T,U> { void accept(T t, U u); } "
+        + "interface Collection<E> { boolean add(E x); } "
+        + "class Test {"
+        + "  <T> void f(Collection<T> c, T o) {"
+        + "    BiConsumer<Collection<T>, T> bc = Collection<T>::add;"
+        + "  }"
+        + "}";
+
+    String impl = translateSourceFile(source, "Test", "Test.m");
+    assertTranslation(impl, "[((id<Collection>) nil_chk(a)) addWithId:a];");
+    assertNotInTranslation(impl, "return [((id<Collection>) nil_chk(a)) addWithId:a];");
+  }
+
+  public void testReferenceToInstanceMethodOfGenericTypeWithReturnType() throws IOException {
+    String source = "interface BiConsumer<T,U> { boolean accept(T t, U u); } "
+        + "interface Collection<E> { boolean add(E x); } "
+        + "class Test {"
+        + "  <T> void f(Collection<T> c, T o) {"
+        + "    BiConsumer<Collection<T>, T> bc = Collection<T>::add;"
+        + "  }"
+        + "}";
+
+    String impl = translateSourceFile(source, "Test", "Test.m");
+    assertTranslation(impl, "return [((id<Collection>) nil_chk(a)) addWithId:a];");
+  }
+
   public void testVarArgs() throws IOException {
     String varArgsHeader = "interface I { void foo(int a1, String a2, String a3); }"
         + "interface I2 { void foo(int a1, String a2, String a3, String a4); }"
@@ -175,5 +202,25 @@ public class MethodReferenceTest extends GenerationTest {
     String translation = translateSourceFile(header + "class Test { V v = Test::new; }", "Test",
         "Test.m");
     assertTranslatedLines(translation, "^void(id _self) {", "create_Test_init();");
+  }
+
+  public void testCreationReferenceNonVoidReturn() throws IOException {
+    String header = "interface V { Object f(); }";
+    String translation = translateSourceFile(header + "class Test { V v = Test::new; }", "Test",
+        "Test.m");
+    assertTranslatedLines(translation, "^id(id _self) {", "return create_Test_init();");
+  }
+
+  public void testArrayCreationReference() throws IOException {
+    String translation = translateSourceFile("import java.util.function.Supplier;"
+        + "interface IntFunction<R> {"
+        + "  R apply(int value);"
+        + "}"
+        + "class Test {"
+        + "  IntFunction<int[]> i = int[]::new;"
+        + "}", "Test", "Test.m");
+    assertNotInTranslation(translation, "return create_IntFunction_initWithIntArray_");
+    assertTranslatedLines(translation,
+        "^IOSIntArray *(id _self, jint a) {", "return [IOSIntArray arrayWithLength:a];");
   }
 }

@@ -419,4 +419,31 @@ public class DefaultMethodsTest extends GenerationTest {
     assertTranslatedLines(implD,
         "- (void)fooWithNSString:(NSString *)arg0 {", "C_fooWithNSString_(self, arg0);", "}");
   }
+
+  // Regression test simplified from java.util.stream.Node.
+  public void testNestedInterfaces() throws IOException {
+    String translation = translateSourceFile(
+        "interface Node<T> { "
+        + "default Node<T> getChild(int i) {"
+        + "  throw new IndexOutOfBoundsException();"
+        + "}"
+        + "interface OfPrimitive<T, T_NODE extends OfPrimitive<T, T_NODE>> extends Node<T> {"
+        + "  default T_NODE getChild(int i) {"
+        + "    throw new IndexOutOfBoundsException();"
+        + "  }"
+        + "}"
+        + "interface OfInt extends OfPrimitive<Integer, OfInt> {}}", "Node", "Node.m");
+    assertTranslatedLines(translation, 
+        "return ((id<Node_OfInt>) Node_OfPrimitive_getChildWithInt_(self, arg0));");
+  }
+
+  // Regression test simplified from java.util.stream.ReduceOps, where @interface for
+  // private interface wasn't generated.
+  public void testPrivateNestedInterfaceWithDefaultMethod() throws IOException {
+    addSourceFile("interface Sink<T> { default void test(long size) {}}", "Sink.java");
+    String translation = translateSourceFile("class Test {"
+        + "private interface AccumulatingSink<T> extends Sink<T> {}}", "Test", "Test.m");
+    assertTranslatedLines(translation,
+        "@interface Test_AccumulatingSink : NSObject < Test_AccumulatingSink >");
+  }
 }

@@ -12,140 +12,132 @@
  * limitations under the License.
  */
 
-package com.google.devtools.j2objc.gen;
+package com.google.devtools.j2objc.translate;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
 import com.google.devtools.j2objc.ast.AbstractTypeDeclaration;
 import com.google.devtools.j2objc.ast.AnnotationTypeDeclaration;
 import com.google.devtools.j2objc.ast.AnnotationTypeMemberDeclaration;
+import com.google.devtools.j2objc.ast.Block;
 import com.google.devtools.j2objc.ast.EnumConstantDeclaration;
 import com.google.devtools.j2objc.ast.EnumDeclaration;
 import com.google.devtools.j2objc.ast.MethodDeclaration;
+import com.google.devtools.j2objc.ast.NativeExpression;
+import com.google.devtools.j2objc.ast.NativeStatement;
+import com.google.devtools.j2objc.ast.ReturnStatement;
 import com.google.devtools.j2objc.ast.SimpleName;
+import com.google.devtools.j2objc.ast.Statement;
 import com.google.devtools.j2objc.ast.TreeUtil;
+import com.google.devtools.j2objc.ast.TreeVisitor;
+import com.google.devtools.j2objc.ast.TypeDeclaration;
 import com.google.devtools.j2objc.ast.VariableDeclarationFragment;
+import com.google.devtools.j2objc.gen.SignatureGenerator;
 import com.google.devtools.j2objc.types.GeneratedMethodBinding;
+import com.google.devtools.j2objc.types.NativeTypeBinding;
 import com.google.devtools.j2objc.util.BindingUtil;
-import com.google.devtools.j2objc.util.NameTable;
+import com.google.devtools.j2objc.util.TranslationUtil;
 import com.google.devtools.j2objc.util.UnicodeUtils;
 
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
+import org.eclipse.jdt.core.dom.Modifier;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Generates the "__metadata" method for a class.
- *
- * @author Tom Ball, Keith Stanger
+ * Adds the __metadata method to classes to support reflection.
  */
-public class MetadataGenerator {
-
-  private final StringBuilder builder;
-  private final AbstractTypeDeclaration typeNode;
-  private final ITypeBinding type;
-  private final NameTable nameTable;
-  private boolean generated = false;
-  private int methodMetadataCount = 0;
-  private int fieldMetadataCount = 0;
+public class MetadataWriter extends TreeVisitor {
 
   // Metadata structure version. Increment it when any structure changes are made.
   public static final int METADATA_VERSION = 2;
 
-  public MetadataGenerator(AbstractTypeDeclaration typeNode) {
-    this.builder = new StringBuilder();
-    this.typeNode = Preconditions.checkNotNull(typeNode);
-    this.type = typeNode.getTypeBinding();
-    this.nameTable = TreeUtil.getCompilationUnit(typeNode).getNameTable();
+  private static final NativeTypeBinding CLASS_INFO_TYPE =
+      new NativeTypeBinding("const J2ObjcClassInfo *");
+
+  @Override
+  public void endVisit(TypeDeclaration node) {
+    visitType(node);
   }
 
-  public String getMetadataSource() {
-    ensureGenerated();
-    return builder.toString();
+  @Override
+  public void endVisit(EnumDeclaration node) {
+    visitType(node);
   }
 
-  private void ensureGenerated() {
-    if (!generated) {
-      generateMetadata();
-      generated = true;
-    }
+  @Override
+  public void endVisit(AnnotationTypeDeclaration node) {
+    visitType(node);
   }
 
-  private void generateMetadata() {
-    if (BindingUtil.isSynthetic(type)) {
+  private void visitType(AbstractTypeDeclaration node) {
+    ITypeBinding type = node.getTypeBinding();
+    if (BindingUtil.isSynthetic(type) || !TranslationUtil.needsReflection(type)) {
       return;
     }
+
+    GeneratedMethodBinding metadataBinding = GeneratedMethodBinding.newMethod(
+        "__metadata", Modifier.STATIC | Modifier.PRIVATE | BindingUtil.ACC_SYNTHETIC,
+        CLASS_INFO_TYPE, type);
+    MethodDeclaration metadataDecl = new MethodDeclaration(metadataBinding);
+    metadataDecl.setHasDeclaration(false);
+
+    Block body = new Block();
+    metadataDecl.setBody(body);
+
+    generateClassMetadata(node, body.getStatements());
+
+    node.getBodyDeclarations().add(metadataDecl);
+  }
+
+  private void generateClassMetadata(AbstractTypeDeclaration typeNode, List<Statement> stmts) {
+    ITypeBinding type = typeNode.getTypeBinding();
     String fullName = nameTable.getFullName(type);
-    println("\n+ (const J2ObjcClassInfo *)__metadata {");
-    generateMethodsMetadata();
-    generateFieldsMetadata();
-    int superclassTypeArgsSize = printSuperclassTypeArguments();
-    int innerClassesSize = printInnerClasses();
-    String enclosingMethodStruct = printEnclosingMethodMetadata();
-    printf("  static const J2ObjcClassInfo _%s = { %d, ", fullName, METADATA_VERSION);
+    StringBuilder sb = new StringBuilder();
+    int methodMetadataCount = generateMethodsMetadata(typeNode, stmts);
+    int fieldMetadataCount = generateFieldsMetadata(typeNode, stmts);
+    int superclassTypeArgsSize = generateSuperclassTypeArguments(type, stmts);
+    int innerClassesSize = generateInnerClasses(type, stmts);
+    String enclosingMethodStruct = generateEnclosingMethodMetadata(type, stmts);
     String simpleName = type.getName();
     if (type.isAnonymous()) {
       simpleName = "";  // Anonymous classes have an empty simple name.
     }
-    printf("\"%s\", ", simpleName);
-    String pkgName = type.getPackage().getName();
-    if (Strings.isNullOrEmpty(pkgName)) {
-      printf("NULL, ");
-    } else {
-      printf("\"%s\", ", pkgName);
-    }
-    printf("%s, ", getEnclosingName());
-    printf("0x%s, ", Integer.toHexString(getTypeModifiers()));
-    printf("%d, ", methodMetadataCount);
-    print(methodMetadataCount > 0 ? "methods, " : "NULL, ");
-    printf("%d, ", fieldMetadataCount);
-    print(fieldMetadataCount > 0 ? "fields, " : "NULL, ");
-    printf("%d, ", superclassTypeArgsSize);
-    printf("%s, ", (superclassTypeArgsSize > 0 ? "superclass_type_args" : "NULL"));
-    printf("%d, ", innerClassesSize);
-    printf("%s, ", (innerClassesSize > 0 ? "inner_classes" : "NULL"));
+    String pkgName = Strings.emptyToNull(type.getPackage().getName());
+    sb.append("static const J2ObjcClassInfo _").append(fullName).append(" = { ");
+    sb.append(METADATA_VERSION).append(", ");
+    sb.append(cStr(simpleName)).append(", ");
+    sb.append(cStr(pkgName)).append(", ");
+    sb.append(getEnclosingName(type)).append(", ");
+    sb.append("0x").append(Integer.toHexString(getTypeModifiers(type))).append(", ");
+    sb.append(methodMetadataCount).append(", ");
+    sb.append(methodMetadataCount > 0 ? "methods, " : "NULL, ");
+    sb.append(fieldMetadataCount).append(", ");
+    sb.append(fieldMetadataCount > 0 ? "fields, " : "NULL, ");
+    sb.append(superclassTypeArgsSize).append(", ");
+    sb.append(superclassTypeArgsSize > 0 ? "superclass_type_args, " : "NULL, ");
+    sb.append(innerClassesSize).append(", ");
+    sb.append(innerClassesSize > 0 ? "inner_classes, " : "NULL, ");
     if (enclosingMethodStruct != null) {
-      printf("&%s, ", enclosingMethodStruct);
+      sb.append('&').append(enclosingMethodStruct).append(", ");
     } else {
-      print("NULL, ");
+      sb.append("NULL, ");
     }
-    print(cStr(SignatureGenerator.createClassSignature(type)));
-    println(" };");
-    printf("  return &_%s;\n}\n", fullName);
+    sb.append(cStr(SignatureGenerator.createClassSignature(type)));
+    sb.append(" };");
+    stmts.add(new NativeStatement(sb.toString()));
+    stmts.add(new ReturnStatement(new NativeExpression("&_" + fullName, CLASS_INFO_TYPE)));
   }
 
-  /**
-   * Prints enclosing method metadata, returns struct's name.
-   */
-  private String printEnclosingMethodMetadata() {
-    IMethodBinding enclosingMethod = type.getDeclaringMethod();
-    if (enclosingMethod == null) {
-      return null;
-    }
-
-    // Method isn't enclosing if this type is defined in a type also enclosed
-    // by this method.
-    if (enclosingMethod.isEqualTo(type.getDeclaringClass().getDeclaringMethod())) {
-      return null;
-    }
-
-    String structName = "enclosing_method";
-    printf("  static const J2ObjCEnclosingMethodInfo %s = { ", structName);
-    printf("\"%s\", ", nameTable.getFullName(enclosingMethod.getDeclaringClass()));
-    printf("\"%s\" };\n", nameTable.getMethodSelector(enclosingMethod));
-    return structName;
-  }
-
-  private String getEnclosingName() {
+  private String getEnclosingName(ITypeBinding type) {
     ITypeBinding declaringType = type.getDeclaringClass();
     if (declaringType == null) {
       return "NULL";
     }
     StringBuilder sb = new StringBuilder("\"");
-    List<String> types = Lists.newArrayList();
+    List<String> types = new ArrayList<>();
     while (declaringType != null) {
       types.add(declaringType.getName());
       declaringType = declaringType.getDeclaringClass();
@@ -160,8 +152,8 @@ public class MetadataGenerator {
     return sb.toString();
   }
 
-  private void generateMethodsMetadata() {
-    List<String> methodMetadata = Lists.newArrayList();
+  private int generateMethodsMetadata(AbstractTypeDeclaration typeNode, List<Statement> stmts) {
+    List<String> methodMetadata = new ArrayList<>();
     for (MethodDeclaration decl : TreeUtil.getMethodDeclarations(typeNode)) {
       IMethodBinding binding = decl.getMethodBinding();
       if (!BindingUtil.isSynthetic(decl.getModifiers()) && !binding.isSynthetic()) {
@@ -180,81 +172,14 @@ public class MetadataGenerator {
       }
     }
     if (methodMetadata.size() > 0) {
-      builder.append("  static const J2ObjcMethodInfo methods[] = {\n");
+      StringBuilder sb = new StringBuilder("static const J2ObjcMethodInfo methods[] = {\n");
       for (String metadata : methodMetadata) {
-        builder.append(metadata);
+        sb.append(metadata);
       }
-      builder.append("  };\n");
+      sb.append("  };");
+      stmts.add(new NativeStatement(sb.toString()));
     }
-    methodMetadataCount = methodMetadata.size();
-  }
-
-  private void generateFieldsMetadata() {
-    List<String> fieldMetadata = Lists.newArrayList();
-    if (typeNode instanceof EnumDeclaration) {
-      for (EnumConstantDeclaration decl : ((EnumDeclaration) typeNode).getEnumConstants()) {
-        fieldMetadata.add(generateFieldMetadata(decl.getVariableBinding(), decl.getName()));
-      }
-    }
-    for (VariableDeclarationFragment f : TreeUtil.getAllFields(typeNode)) {
-      String metadata = generateFieldMetadata(f.getVariableBinding(), f.getName());
-      if (metadata != null) {
-        fieldMetadata.add(metadata);
-      }
-    }
-    if (fieldMetadata.size() > 0) {
-      builder.append("  static const J2ObjcFieldInfo fields[] = {\n");
-      for (String metadata : fieldMetadata) {
-        builder.append(metadata);
-      }
-      builder.append("  };\n");
-    }
-    fieldMetadataCount = fieldMetadata.size();
-  }
-
-  private String generateFieldMetadata(IVariableBinding var, SimpleName name) {
-    if (BindingUtil.isSynthetic(var)) {
-      return null;
-    }
-    int modifiers = getFieldModifiers(var);
-    String javaName = name.getIdentifier();
-    String objcName = nameTable.getVariableShortName(var);
-    if (objcName.equals(javaName + '_')) {
-      // Don't print Java name if it matches the default pattern, to conserve space.
-      javaName = null;
-    }
-    String staticRef = "NULL";
-    String constantValue;
-    if (BindingUtil.isPrimitiveConstant(var)) {
-      constantValue = UnicodeUtils.format(".constantValue.%s = %s",
-          getRawValueField(var), nameTable.getVariableQualifiedName(var));
-    } else {
-      // Explicit 0-initializer to avoid Clang warning.
-      constantValue = ".constantValue.asLong = 0";
-      if (BindingUtil.isStatic(var)) {
-        staticRef = '&' + nameTable.getVariableQualifiedName(var);
-      }
-    }
-    return UnicodeUtils.format(
-        "    { \"%s\", %s, 0x%x, \"%s\", %s, %s, %s },\n",
-        objcName, cStr(javaName), modifiers, getTypeName(var.getType()), staticRef,
-        cStr(SignatureGenerator.createFieldTypeSignature(var)), constantValue);
-  }
-
-  private String getRawValueField(IVariableBinding var) {
-    ITypeBinding type = var.getType();
-    assert type.isPrimitive();
-    switch (type.getBinaryName().charAt(0)) {
-      case 'B': return "asChar";
-      case 'C': return "asUnichar";
-      case 'D': return "asDouble";
-      case 'F': return "asFloat";
-      case 'I': return "asInt";
-      case 'J': return "asLong";
-      case 'S': return "asShort";
-      case 'Z': return "asBOOL";
-    }
-    throw new AssertionError();
+    return methodMetadata.size();
   }
 
   private String getMethodMetadata(IMethodBinding method) {
@@ -285,7 +210,77 @@ public class MetadataGenerator {
     return sb.toString();
   }
 
-  private int printSuperclassTypeArguments() {
+  private int generateFieldsMetadata(AbstractTypeDeclaration typeNode, List<Statement> stmts) {
+    List<String> fieldMetadata = new ArrayList<>();
+    if (typeNode instanceof EnumDeclaration) {
+      for (EnumConstantDeclaration decl : ((EnumDeclaration) typeNode).getEnumConstants()) {
+        fieldMetadata.add(generateFieldMetadata(decl.getVariableBinding(), decl.getName()));
+      }
+    }
+    for (VariableDeclarationFragment f : TreeUtil.getAllFields(typeNode)) {
+      String metadata = generateFieldMetadata(f.getVariableBinding(), f.getName());
+      if (metadata != null) {
+        fieldMetadata.add(metadata);
+      }
+    }
+    if (fieldMetadata.size() > 0) {
+      StringBuilder sb = new StringBuilder("static const J2ObjcFieldInfo fields[] = {\n");
+      for (String metadata : fieldMetadata) {
+        sb.append(metadata);
+      }
+      sb.append("  };");
+      stmts.add(new NativeStatement(sb.toString()));
+    }
+    return fieldMetadata.size();
+  }
+
+  private String generateFieldMetadata(IVariableBinding var, SimpleName name) {
+    if (BindingUtil.isSynthetic(var)) {
+      return null;
+    }
+    int modifiers = getFieldModifiers(var);
+    boolean isStatic = BindingUtil.isStatic(var);
+    String javaName = name.getIdentifier();
+    String objcName = nameTable.getVariableShortName(var);
+    if ((isStatic && objcName.equals(javaName)) || (!isStatic && objcName.equals(javaName + '_'))) {
+      // Don't print Java name if it matches the default pattern, to conserve space.
+      javaName = null;
+    }
+    String staticRef = "NULL";
+    String constantValue;
+    if (BindingUtil.isPrimitiveConstant(var)) {
+      constantValue = UnicodeUtils.format(".constantValue.%s = %s",
+          getRawValueField(var), nameTable.getVariableQualifiedName(var));
+    } else {
+      // Explicit 0-initializer to avoid Clang warning.
+      constantValue = ".constantValue.asLong = 0";
+      if (isStatic) {
+        staticRef = '&' + nameTable.getVariableQualifiedName(var);
+      }
+    }
+    return UnicodeUtils.format(
+        "    { \"%s\", %s, 0x%x, \"%s\", %s, %s, %s },\n",
+        objcName, cStr(javaName), modifiers, getTypeName(var.getType()), staticRef,
+        cStr(SignatureGenerator.createFieldTypeSignature(var)), constantValue);
+  }
+
+  private String getRawValueField(IVariableBinding var) {
+    ITypeBinding type = var.getType();
+    assert type.isPrimitive();
+    switch (type.getBinaryName().charAt(0)) {
+      case 'B': return "asChar";
+      case 'C': return "asUnichar";
+      case 'D': return "asDouble";
+      case 'F': return "asFloat";
+      case 'I': return "asInt";
+      case 'J': return "asLong";
+      case 'S': return "asShort";
+      case 'Z': return "asBOOL";
+    }
+    throw new AssertionError();
+  }
+
+  private int generateSuperclassTypeArguments(ITypeBinding type, List<Statement> stmts) {
     ITypeBinding superclass = type.getSuperclass();
     if (superclass == null) {
       return 0;
@@ -294,31 +289,54 @@ public class MetadataGenerator {
     if (typeArgs.length == 0) {
       return 0;
     }
-    print("  static const char *superclass_type_args[] = {");
+    StringBuilder sb = new StringBuilder("static const char *superclass_type_args[] = {");
     for (int i = 0; i < typeArgs.length; i++) {
       if (i != 0) {
-        print(", ");
+        sb.append(", ");
       }
-      printf("\"%s\"", getTypeName(typeArgs[i]));
+      sb.append(cStr(getTypeName(typeArgs[i])));
     }
-    println("};");
+    sb.append("};");
+    stmts.add(new NativeStatement(sb.toString()));
     return typeArgs.length;
   }
 
-  private int printInnerClasses() {
+  private int generateInnerClasses(ITypeBinding type, List<Statement> stmts) {
     ITypeBinding[] innerTypes = type.getDeclaredTypes();
     if (innerTypes.length == 0) {
       return 0;
     }
-    print("  static const char *inner_classes[] = {");
+    StringBuilder sb = new StringBuilder("static const char *inner_classes[] = {");
     for (int i = 0; i < innerTypes.length; i++) {
       if (i != 0) {
-        print(", ");
+        sb.append(", ");
       }
-      printf("\"%s\"", getTypeName(innerTypes[i]));
+      sb.append(cStr(getTypeName(innerTypes[i])));
     }
-    println("};");
+    sb.append("};");
+    stmts.add(new NativeStatement(sb.toString()));
     return innerTypes.length;
+  }
+
+  private String generateEnclosingMethodMetadata(ITypeBinding type, List<Statement> stmts) {
+    IMethodBinding enclosingMethod = type.getDeclaringMethod();
+    if (enclosingMethod == null) {
+      return null;
+    }
+
+    // Method isn't enclosing if this type is defined in a type also enclosed
+    // by this method.
+    if (enclosingMethod.isEqualTo(type.getDeclaringClass().getDeclaringMethod())) {
+      return null;
+    }
+
+    String structName = "enclosing_method";
+    StringBuilder sb = new StringBuilder("static const J2ObjCEnclosingMethodInfo ")
+        .append(structName).append(" = { ")
+        .append(cStr(nameTable.getFullName(enclosingMethod.getDeclaringClass()))).append(", ")
+        .append(cStr(nameTable.getMethodSelector(enclosingMethod))).append(" };");
+    stmts.add(new NativeStatement(sb.toString()));
+    return structName;
   }
 
   private static String getTypeName(ITypeBinding type) {
@@ -335,7 +353,7 @@ public class MetadataGenerator {
    * Returns the modifiers for a specified type, including internal ones.
    * All class modifiers are defined in the JVM specification, table 4.1.
    */
-  private int getTypeModifiers() {
+  private static int getTypeModifiers(ITypeBinding type) {
     int modifiers = type.getModifiers();
     if (type.isInterface()) {
       modifiers |= java.lang.reflect.Modifier.INTERFACE | java.lang.reflect.Modifier.ABSTRACT
@@ -389,17 +407,5 @@ public class MetadataGenerator {
 
   private String cStr(String s) {
     return s == null ? "NULL" : "\"" + s + "\"";
-  }
-
-  private void print(String s) {
-    builder.append(s);
-  }
-
-  private void printf(String format, Object... args) {
-    builder.append(UnicodeUtils.format(format, args));
-  }
-
-  private void println(String s) {
-    builder.append(s).append('\n');
   }
 }

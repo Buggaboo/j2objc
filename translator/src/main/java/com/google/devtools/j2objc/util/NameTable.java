@@ -24,6 +24,7 @@ import com.google.devtools.j2objc.Options;
 import com.google.devtools.j2objc.ast.CompilationUnit;
 import com.google.devtools.j2objc.types.GeneratedVariableBinding;
 import com.google.devtools.j2objc.types.IOSMethodBinding;
+import com.google.devtools.j2objc.types.NativeTypeBinding;
 import com.google.devtools.j2objc.types.PointerTypeBinding;
 import com.google.devtools.j2objc.types.Types;
 import com.google.j2objc.annotations.ObjectiveCName;
@@ -624,10 +625,30 @@ public class NameTable {
 
   /**
    * Similar to getFullFunctionName, but doesn't add the selector to the name, as lambda expressions
-   * cannot be overloaded.
+   * cannot be overloaded. The binding's key is used because as of JDT 3.11, the function and
+   * method names are from the functional method definition, not its implementation.
    */
   public String getFullLambdaName(IMethodBinding method) {
-    return getFullName(method.getDeclaringClass()) + '_' + method.getName();
+    String key = method.getKey();
+    String className;
+    if (key.startsWith("L")) {
+      int iEnd = key.indexOf(';');
+      className = key.substring(1,  iEnd).replace('$', '_');
+    } else {
+      className = getFullName(method.getDeclaringClass());
+    }
+    return className + '_' + extractLambdaNamefromKey(method);
+  }
+
+  public static String extractLambdaNamefromKey(IMethodBinding binding) {
+    String key = binding.getKey();
+    // Key format is "L<classname>;.lambda$n(<arg_types>)<return type>;".
+    int iStart = key.indexOf("lambda");
+    int iEnd = key.indexOf('(');
+    if (iStart < 0 || iEnd < 0) {
+      return binding.getName();
+    }
+    return key.substring(iStart,  iEnd);
   }
 
   /**
@@ -769,7 +790,9 @@ public class NameTable {
 
   private String getObjCTypeInner(ITypeBinding type, String qualifiers) {
     String objCType;
-    if (type instanceof PointerTypeBinding) {
+    if (type instanceof NativeTypeBinding) {
+      objCType = type.getName();
+    } else if (type instanceof PointerTypeBinding) {
       String pointeeQualifiers = null;
       if (qualifiers != null) {
         int idx = qualifiers.indexOf('*');
