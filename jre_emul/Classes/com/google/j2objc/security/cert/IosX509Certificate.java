@@ -31,6 +31,7 @@ import java.security.cert.CertificateNotYetValidException;
 import java.security.cert.X509Certificate;
 import java.util.Date;
 import java.util.Set;
+import org.apache.harmony.security.PublicKeyImpl;
 
 /*-[
 #include "NSDataInputStream.h"
@@ -147,8 +148,69 @@ public class IosX509Certificate extends X509Certificate {
 
   @Override
   public PublicKey getPublicKey() {
-    return null;
+    PublicKeyImpl publicKey = new PublicKeyImpl(""); // TODO determine crypto algo
+    try {
+      publicKey.setEncoding(getRawPublicKeyFromCertificate(getEncoded()));
+      return (PublicKey) publicKey;
+    }catch (CertificateEncodingException ex) {
+      // ignore, let the debugger find out
+    }finally {
+      return null; // bad certificate
+    }
   }
+  
+  private native byte[] getRawPublicKeyFromCertificate(byte[] encoded) /*-[
+    // create certificate.
+    CFDataRef dataRef=CFDataCreate(kCFAllocatorDefault, [encoded buffer], (CFIndex)[encoded length]);
+    SecCertificateRef certiRef=SecCertificateCreateWithData(kCFAllocatorDefault, dataRef);
+    (CFRelease(dataRef));
+    
+    // evaluate certificate.
+    CFArrayRef certs = CFArrayCreate(kCFAllocatorDefault, (const void **) &certiRef, 1, NULL);
+    SecPolicyRef policy = SecPolicyCreateBasicX509();
+    SecTrustRef trust;
+    SecTrustCreateWithCertificates(certs, policy, &trust);
+    (CFRelease(certs));
+    SecTrustResultType trustResult;
+    SecTrustEvaluate(trust, &trustResult);
+    
+    // get public key ref
+    SecKeyRef pubKeyRef = SecTrustCopyPublicKey(trust);
+    
+    (CFRelease(trust));
+    (CFRelease(policy));
+    (CFRelease(certiRef));
+    
+    static const uint8_t publicKeyIdentifier[] = "org.j2objc.shared.publickey";
+    NSData* publicTag = [[NSData alloc] initWithBytes:publicKeyIdentifier length:sizeof(publicKeyIdentifier)];
+
+    OSStatus sanityCheck = noErr;
+    NSData* publicKeyBits = nil;
+
+    NSMutableDictionary * queryPublicKey = [[NSMutableDictionary alloc] init];
+    [queryPublicKey setObject:(__bridge id)kSecClassKey forKey:(__bridge id)kSecClass];
+    [queryPublicKey setObject:publicTag forKey:(__bridge id)kSecAttrApplicationTag];
+    [queryPublicKey setObject:(__bridge id)kSecAttrKeyTypeRSA forKey:(__bridge id)kSecAttrKeyType];
+
+    // TODO all crypto keys converted to data go through this, refactor this out to a util
+    // temporarily add key to the Keychain, return as data
+    NSMutableDictionary * attributes = [queryPublicKey mutableCopy];
+    [attributes setObject:(__bridge id)pubKeyRef forKey:(__bridge id)kSecValueRef];
+    [attributes setObject:@YES forKey:(__bridge id)kSecReturnData];
+    CFTypeRef result;
+    sanityCheck = SecItemAdd((__bridge CFDictionaryRef) attributes, &result);
+    if (sanityCheck == errSecSuccess) {
+        publicKeyBits = CFBridgingRelease(result);
+
+        // Remove from Keychain again
+        (void)SecItemDelete((__bridge CFDictionaryRef) queryPublicKey);
+    }
+
+    IOSByteArray* rawPubKey = [IOSByteArray arrayWithNSData:publicKeyBits];
+    
+    // it could be anything ECC, DSA, RSA etc.
+    return rawPubKey;
+  ]-*/;
 
   @Override
   public BigInteger getSerialNumber() {
