@@ -36,7 +36,6 @@
 @class JavaLangReflectMethod;
 @protocol JavaLangAnnotationAnnotation;
 @class JavaIoInputStream;
-@class JavaClassMetadata;
 @class JavaNetURL;
 
 /**
@@ -90,7 +89,10 @@
 - (NSString *)getCanonicalName;
 
 // Class.getModifiers()
-- (int)getModifiers;
+- (jint)getModifiers;
+
+// Class.getAccessFlags()
+- (jint)getAccessFlags;
 
 // Class.getDeclaredConstructors()
 - (IOSObjectArray *)getDeclaredConstructors;
@@ -154,11 +156,13 @@
 - (IOSObjectArray *)getGenericInterfaces;
 - (IOSObjectArray *)getTypeParameters;
 
-- (id)getAnnotationWithIOSClass:(IOSClass *)annotationClass;
+- (id<JavaLangAnnotationAnnotation>)
+      getAnnotationWithIOSClass:(IOSClass *)annotationClass;
 - (jboolean)isAnnotationPresentWithIOSClass:(IOSClass *)annotationType;
 - (IOSObjectArray *)getAnnotations;
 - (IOSObjectArray *)getDeclaredAnnotations;
-
+- (id<JavaLangAnnotationAnnotation>)
+      getDeclaredAnnotationWithIOSClass:(IOSClass *)annotationClass;
 - (id)getPackage;
 - (id)getClassLoader;
 
@@ -193,19 +197,18 @@
 - (jboolean)__convertRawValue:(J2ObjcRawValue *)rawValue toType:(IOSClass *)type;
 
 // Internal methods
-- (void)collectMethods:(NSMutableDictionary *)methodMap
-            publicOnly:(jboolean)publicOnly;
 - (JavaLangReflectMethod *)findMethodWithTranslatedName:(NSString *)objcName
                                         checkSupertypes:(jboolean)checkSupertypes;
 - (JavaLangReflectConstructor *)findConstructorWithTranslatedName:(NSString *)objcName;
 // Same as getInterfaces, but not a defensive copy.
 - (IOSObjectArray *)getInterfacesInternal;
-- (JavaClassMetadata *)getMetadata;
+- (const J2ObjcClassInfo *)getMetadata;
 - (NSString *)objcName;
 - (NSString *)binaryName;
 // Get the IOSArray subclass that would be used to hold this type.
 - (Class)objcArrayClass;
 - (size_t)getSizeof;
+- (IOSObjectArray *)getEnumConstantsShared;
 
 @end
 
@@ -235,8 +238,10 @@ IOSClass *IOSClass_arrayType(IOSClass *componentType, jint dimensions);
 #define IOSClass_booleanArray(DIM) IOSClass_arrayType([IOSClass booleanClass], DIM)
 
 // Internal functions
+const J2ObjcClassInfo *IOSClass_GetMetadataOrFail(IOSClass *iosClass);
 NSString *IOSClass_GetTranslatedMethodName(
     IOSClass *cls, NSString *name, IOSObjectArray *paramTypes);
+IOSClass *IOSClass_NewProxyClass(Class cls);
 
 // Return value is retained
 IOSObjectArray *IOSClass_NewInterfacesFromProtocolList(Protocol **list, unsigned int count);

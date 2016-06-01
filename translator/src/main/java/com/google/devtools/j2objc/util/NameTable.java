@@ -24,6 +24,7 @@ import com.google.devtools.j2objc.Options;
 import com.google.devtools.j2objc.ast.CompilationUnit;
 import com.google.devtools.j2objc.types.GeneratedVariableBinding;
 import com.google.devtools.j2objc.types.IOSMethodBinding;
+import com.google.devtools.j2objc.types.NativeTypeBinding;
 import com.google.devtools.j2objc.types.PointerTypeBinding;
 import com.google.devtools.j2objc.types.Types;
 import com.google.j2objc.annotations.ObjectiveCName;
@@ -606,7 +607,7 @@ public class NameTable {
    * variable names range from 'a' to 'zz'. This only supports 676 arguments, but this more than the
    * java limit of 255 / 254 parameters for static / non-static parameters, respectively.
    */
-  public char[] incrementVariable(char[] var) {
+  public static char[] incrementVariable(char[] var) {
     if (var == null) {
       return new char[] { 'a' };
     }
@@ -620,14 +621,6 @@ public class NameTable {
       var[1] = 'a';
     }
     return var;
-  }
-
-  /**
-   * Similar to getFullFunctionName, but doesn't add the selector to the name, as lambda expressions
-   * cannot be overloaded.
-   */
-  public String getFullLambdaName(IMethodBinding method) {
-    return getFullName(method.getDeclaringClass()) + '_' + method.getName();
   }
 
   /**
@@ -769,7 +762,9 @@ public class NameTable {
 
   private String getObjCTypeInner(ITypeBinding type, String qualifiers) {
     String objCType;
-    if (type instanceof PointerTypeBinding) {
+    if (type instanceof NativeTypeBinding) {
+      objCType = type.getName();
+    } else if (type instanceof PointerTypeBinding) {
       String pointeeQualifiers = null;
       if (qualifiers != null) {
         int idx = qualifiers.indexOf('*');

@@ -212,6 +212,8 @@ TEST_SOURCES := \
     com/google/j2objc/LinkedListTest.java \
     com/google/j2objc/MemoryTest.java \
     com/google/j2objc/PackageTest.java \
+    com/google/j2objc/RetainedWithTest.java \
+    com/google/j2objc/StringTest.java \
     com/google/j2objc/ThrowableTest.java \
     com/google/j2objc/net/NSErrorExceptionTest.java \
     com/google/j2objc/security/IosSecureRandomImplTest.java \
@@ -610,6 +612,7 @@ TEST_SOURCES := \
 
 SUITE_SOURCES = \
     ConcurrencyTests.java \
+    com/google/j2objc/ReflectionTests.java \
     libcore/java/io/SmallTests.java \
     libcore/java/text/LargeTests.java \
     libcore/java/text/SmallTests.java \

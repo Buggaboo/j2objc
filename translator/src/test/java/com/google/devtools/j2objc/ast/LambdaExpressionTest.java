@@ -40,7 +40,7 @@ public class LambdaExpressionTest extends GenerationTest {
   public void testBlockBodyCreation() throws IOException {
     String translation = translateSourceFile(functionHeader + "class Test { Function f = x -> x;}",
         "Test", "Test.m");
-    assertTranslatedLines(translation, "id x){", "return x;");
+    assertTranslatedLines(translation, "id x) {", "return x;");
   }
 
   public void testCaptureDetection() throws IOException {
@@ -103,13 +103,11 @@ public class LambdaExpressionTest extends GenerationTest {
         "^NSString *(id _self, NSString * y)", "return y;");
   }
 
-  // Test that we are properly adding protocols for casting.
-  public void testProtocolCast() throws IOException {
+  // There's no need for a cast_check call on a lambda whose type matches the assigned type.
+  public void testNoCastCheck() throws IOException {
     String translation = translateSourceFile(
         functionHeader + "class Test { Function f = (Function) (x) -> x;}", "Test", "Test.m");
-    assertTranslatedSegments(translation,
-        "(id<Function>) cast_check(GetNonCapturingLambda(NULL, @protocol(Function), ",
-        "Function_class_()");
+    assertNotInTranslation(translation, "cast_check");
   }
 
   // Test that we aren't trying to import lambda types.
@@ -125,7 +123,7 @@ public class LambdaExpressionTest extends GenerationTest {
         + "class Test { class Foo{ class Bar { Function f = x -> x; }}\n"
         + "Function f = x -> x;}",
         "Test", "Test.m");
-    assertTranslatedSegments(translation, "@\"Test_lambda$", "@\"Test_Foo_Bar_lambda");
+    assertTranslatedSegments(translation, "@\"Test$$Lambda$1\"", "@\"Test_Foo_Bar$$Lambda$1\"");
   }
 
   public void testLargeArgumentCount() throws IOException {
@@ -147,7 +145,7 @@ public class LambdaExpressionTest extends GenerationTest {
         "return block(_self, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, ",
         "bn, bo, bp, bq, br, bs, bt, bu, bv, bw, bx, by, bz, ca);",
         "^id(id _self, id a, id b, id c, id d, id e, id f, id g, id h, id i, id j, id k, id l, ",
-        "id bw, id bx, id by, id bz, id bar){");
+        "id bw, id bx, id by, id bz, id bar) {");
   }
 
   public void testCapturingBasicTypeReturn() throws IOException {
@@ -155,7 +153,7 @@ public class LambdaExpressionTest extends GenerationTest {
     String translation = translateSourceFile(
         header + "class Test { int f = 1234; " + "  void foo() { I i = () -> f; } }", "Test",
         "Test.m");
-    assertTranslatedLines(translation, "^jint(id _self){", "return f_;");
+    assertTranslatedLines(translation, "^jint(id _self) {", "return f_;");
   }
 
   // Verify that an #include is generated for the lambda's functionalType.
@@ -181,6 +179,5 @@ public class LambdaExpressionTest extends GenerationTest {
         + "  }"
         + "}", "Comparator", "foo/bar/Comparator.m");
     assertTranslation(translation, "GetCapturingLambda([FooBarComparator class]");
-    assertTranslation(translation, "FooBarComparator_class_()");
   }
 }

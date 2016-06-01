@@ -43,17 +43,17 @@ public class MethodReferenceTest extends GenerationTest {
         creationReferenceHeader + "class Test { Call<I> iInit = I::new; }",
         "Test", "Test.m");
     assertTranslatedSegments(noArgumentTranslation, "GetNonCapturingLambda(NULL, @protocol(Call)",
-        "@\"I_init\"", "^I *(id _self) {", "return create_I_init();");
+        "@\"Test$$Lambda$1\"", "^I *(id _self) {", "return create_I_init();");
     String oneArgumentTranslation = translateSourceFile(
         creationReferenceHeader + "class Test { FunInt<I> iInit2 = I::new; }", "Test", "Test.m");
     assertTranslatedSegments(oneArgumentTranslation,
         "GetNonCapturingLambda(NULL, @protocol(FunInt)",
-        "@\"I_initWithInt_\"", "^I *(id _self, jint a) {", "return create_I_initWithInt_(a);");
+        "@\"Test$$Lambda$1\"", "^I *(id _self, jint a) {", "return create_I_initWithInt_(a);");
     String mixedArgumentTranslation = translateSourceFile(
         creationReferenceHeader + "class Test { FunInt4<I> iInit3 = I::new; }", "Test", "Test.m");
     assertTranslatedSegments(mixedArgumentTranslation,
         "GetNonCapturingLambda(NULL, @protocol(FunInt4)",
-        "@\"I_initWithInt_withI_withNSString_withId_\"",
+        "@\"Test$$Lambda$1\"",
         "^I *(id _self, jint a, I * b, NSString * c, id d) {",
         "return create_I_initWithInt_withI_withNSString_withId_(a, b, c, d);");
   }
@@ -65,12 +65,12 @@ public class MethodReferenceTest extends GenerationTest {
     String staticTranslation = translateSourceFile(
         expressionReferenceHeader + "class Test { F fun = Q::o; }",
         "Test", "Test.m");
-    assertTranslatedSegments(staticTranslation, "GetNonCapturingLambda", "@\"Q_oWithId_\"",
+    assertTranslatedSegments(staticTranslation, "GetNonCapturingLambda", "@\"Test$$Lambda$1\"",
         "@selector(fWithId:)", "return Q_oWithId_(a);");
     String instanceTranslation = translateSourceFile(
         expressionReferenceHeader + "class Test { F fun = new Q()::o2; }",
         "Test", "Test.m");
-    assertTranslatedSegments(instanceTranslation, "GetNonCapturingLambda", "@\"Q_o2WithId_\"",
+    assertTranslatedSegments(instanceTranslation, "GetNonCapturingLambda", "@\"Test$$Lambda$1\"",
         "@selector(fWithId:)", "return [create_Q_init() o2WithId:a];");
   }
 
@@ -96,6 +96,33 @@ public class MethodReferenceTest extends GenerationTest {
     assertTranslation(impl, "return [((NSString *) nil_chk(a)) compareToWithId:b];");
   }
 
+  public void testReferenceToInstanceMethodOfGenericType() throws IOException {
+    String source = "interface BiConsumer<T,U> { void accept(T t, U u); } "
+        + "interface Collection<E> { boolean add(E x); } "
+        + "class Test {"
+        + "  <T> void f(Collection<T> c, T o) {"
+        + "    BiConsumer<Collection<T>, T> bc = Collection<T>::add;"
+        + "  }"
+        + "}";
+
+    String impl = translateSourceFile(source, "Test", "Test.m");
+    assertTranslation(impl, "[((id<Collection>) nil_chk(a)) addWithId:b];");
+    assertNotInTranslation(impl, "return [((id<Collection>) nil_chk(a)) addWithId:b];");
+  }
+
+  public void testReferenceToInstanceMethodOfGenericTypeWithReturnType() throws IOException {
+    String source = "interface BiConsumer<T,U> { boolean accept(T t, U u); } "
+        + "interface Collection<E> { boolean add(E x); } "
+        + "class Test {"
+        + "  <T> void f(Collection<T> c, T o) {"
+        + "    BiConsumer<Collection<T>, T> bc = Collection<T>::add;"
+        + "  }"
+        + "}";
+
+    String impl = translateSourceFile(source, "Test", "Test.m");
+    assertTranslation(impl, "return [((id<Collection>) nil_chk(a)) addWithId:b];");
+  }
+
   public void testVarArgs() throws IOException {
     String varArgsHeader = "interface I { void foo(int a1, String a2, String a3); }"
         + "interface I2 { void foo(int a1, String a2, String a3, String a4); }"
@@ -105,15 +132,14 @@ public class MethodReferenceTest extends GenerationTest {
         "Test", "Test.m");
     assertTranslatedLines(translation,
         "JreStrongAssign(&self->i_, GetNonCapturingLambda(NULL, @protocol(I), "
-        + "@\"Y_mWithInt_withNSString_withNSString_\", "
-        + "@selector(fooWithInt:withNSString:withNSString:),",
+        + "@\"Test$$Lambda$1\", @selector(fooWithInt:withNSString:withNSString:),",
         "^void(id _self, jint a, NSString * b, NSString * c) {",
         "Y_mWithInt_withNSStringArray_(a, [IOSObjectArray arrayWithObjects:(id[]){ b, c } "
         + "count:2 type:NSString_class_()]);",
-        "}));",
+        "}",
+        "));",
         "JreStrongAssign(&self->i2_, GetNonCapturingLambda(NULL, @protocol(I2), "
-        + "@\"Y_mWithInt_withNSString_withNSString_withNSString_\", "
-        + "@selector(fooWithInt:withNSString:withNSString:withNSString:),",
+        + "@\"Test$$Lambda$2\", @selector(fooWithInt:withNSString:withNSString:withNSString:),",
         "^void(id _self, jint a, NSString * b, NSString * c, NSString * d) {",
         "Y_mWithInt_withNSStringArray_(a, [IOSObjectArray arrayWithObjects:(id[]){ b, c, d } "
         + "count:3 type:NSString_class_()]);");
@@ -175,5 +201,56 @@ public class MethodReferenceTest extends GenerationTest {
     String translation = translateSourceFile(header + "class Test { V v = Test::new; }", "Test",
         "Test.m");
     assertTranslatedLines(translation, "^void(id _self) {", "create_Test_init();");
+  }
+
+  public void testCreationReferenceNonVoidReturn() throws IOException {
+    String header = "interface V { Object f(); }";
+    String translation = translateSourceFile(header + "class Test { V v = Test::new; }", "Test",
+        "Test.m");
+    assertTranslatedLines(translation, "^id(id _self) {", "return create_Test_init();");
+  }
+
+  public void testArrayCreationReference() throws IOException {
+    String translation = translateSourceFile("import java.util.function.Supplier;"
+        + "interface IntFunction<R> {"
+        + "  R apply(int value);"
+        + "}"
+        + "class Test {"
+        + "  IntFunction<int[]> i = int[]::new;"
+        + "}", "Test", "Test.m");
+    assertNotInTranslation(translation, "return create_IntFunction_initWithIntArray_");
+    assertTranslatedLines(translation,
+        "^IOSIntArray *(id _self, jint a) {", "return [IOSIntArray arrayWithLength:a];");
+  }
+
+  public void testCreationReferenceOfLocalCapturingType() throws IOException {
+    String translation = translateSourceFile(
+        "interface Supplier<T> { T get(); }"
+        + "class Test { static Supplier<Runnable> test(Runnable r) {"
+        + "class Runner implements Runnable { public void run() { r.run(); } }"
+        + "return Runner::new; } }", "Test", "Test.m");
+    assertTranslatedSegments(translation,
+        "GetCapturingLambda", "return create_Test_1Runner_initWithJavaLangRunnable_(r);");
+  }
+
+  public void testQualifiedSuperMethodReference() throws IOException {
+    String translation = translateSourceFile(
+        "interface I { void bar(); }"
+        + "class Test { void foo() {} static class TestSub extends Test { void foo() {}"
+        + "class Inner { I test() { return TestSub.super::foo; } } } }",
+        "Test", "Test.m");
+    assertTranslatedSegments(translation,
+        "static void (*Test_TestSub_super$_foo)(id, SEL);",
+        "GetCapturingLambda(NULL, @protocol(I)",
+        "^void(id _self) {", "Test_TestSub_super$_foo(this$0_, @selector(foo));", "}");
+  }
+
+  public void testMultipleMethodReferencesNilChecks() throws IOException {
+    String translation = translateSourceFile(
+        "interface Foo { void f(Test t); }"
+        + "class Test { void foo() {} void test() {"
+        + " Foo f1 = Test::foo; Foo f2 = Test::foo; } }", "Test", "Test.m");
+    // Both lambdas must perform a nil_chk on their local variable "a".
+    assertOccurrences(translation, "nil_chk(a)", 2);
   }
 }

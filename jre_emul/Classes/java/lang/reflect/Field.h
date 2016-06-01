@@ -23,13 +23,13 @@
 #define _JavaLangReflectField_H_
 
 #import "AccessibleObject.h"
+#import "IOSReflection.h"
 #import "J2ObjC_common.h"
 #import "java/lang/reflect/Member.h"
 #import <objc/runtime.h>
 
 @class IOSClass;
 @class IOSObjectArray;
-@class JavaFieldMetadata;
 
 // A native implementation of java.lang.reflect.Field.  Its methods are
 // limited to those that can be derived from the Objective-C runtime,
@@ -38,15 +38,15 @@
 @protected
   Ivar ivar_;
   IOSClass *declaringClass_;
-  JavaFieldMetadata *metadata_;
+  const J2ObjcFieldInfo *metadata_;
 }
 
 - (instancetype)initWithIvar:(Ivar)ivar
                    withClass:(IOSClass *)aClass
-                withMetadata:(JavaFieldMetadata *)metadata;
+                withMetadata:(const J2ObjcFieldInfo *)metadata;
 + (instancetype)fieldWithIvar:(Ivar)ivar
                     withClass:(IOSClass *)aClass
-                 withMetadata:(JavaFieldMetadata *)metadata;
+                 withMetadata:(const J2ObjcFieldInfo *)metadata;
 
 // Returns field name.
 - (NSString *)getName;
@@ -80,11 +80,6 @@
 
 // Returns type.
 - (id<JavaLangReflectType>)getGenericType;
-
-// Convert between property and variable names.
-- (NSString *)propertyName;
-+ (NSString *)propertyName:(NSString *)name;
-+ (NSString *)variableName:(NSString *)name;
 
 // Should only be used by sun.misc.Unsafe.
 - (int)unsafeOffset;

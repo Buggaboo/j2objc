@@ -19,7 +19,7 @@
 
 #import "IOSMappedClass.h"
 #import "IOSObjectArray.h"
-#import "JavaMetadata.h"
+#import "IOSReflection.h"
 #import "java/lang/Package.h"
 #import "java/lang/reflect/Method.h"
 #import "java/lang/reflect/Modifier.h"
@@ -27,6 +27,8 @@
 // Class representation for a mapped class, such as NSObject or NSString.
 // All reflection information is determined by metadata, to avoid returning
 // Objective-C specific methods or classes.
+// TODO(kstanger): This class can probably be removed now that metadata is
+// required for all classes.
 @implementation IOSMappedClass
 
 - (instancetype)initWithClass:(Class)cls package:(NSString *)package name:(NSString *)name {
@@ -57,59 +59,8 @@
                                                   withNSString:nil
                                                   withNSString:nil
                                                   withNSString:nil
-                                                withJavaNetURL:nil]);
-}
-
-static void CollectMethodsOrConstructors(IOSMappedClass *self,
-                                         NSMutableDictionary *methodMap,
-                                         jboolean publicOnly,
-                                         jboolean constructors) {
-  JavaClassMetadata *metadata = [self getMetadata];
-  IOSObjectArray *methodInfos = [metadata allMethods];
-  for (unsigned i = 0; i < metadata.methodCount; i++) {
-    JavaMethodMetadata *info = [methodInfos objectAtIndex:i];
-    if ([info isConstructor] == constructors) {
-      int mods = [info modifiers];
-      if (publicOnly && !(mods & JavaLangReflectModifier_PUBLIC)) {
-        continue;
-      }
-      SEL sel = [info selector];
-      jboolean isStatic = (mods & JavaLangReflectModifier_STATIC) != 0;
-      NSMethodSignature *signature = nil;
-      if (isStatic) {
-        signature = [self->class_ methodSignatureForSelector:sel];
-      } else {
-        signature = [self->class_ instanceMethodSignatureForSelector:sel];
-      }
-      if (signature) {
-        JavaLangReflectMethod *method = [JavaLangReflectMethod methodWithMethodSignature:signature
-                                                                                selector:sel
-                                                                                   class:self
-                                                                                isStatic:isStatic
-                                                                                metadata:info];
-        [methodMap setObject:method forKey:[info name]];
-      }
-    }
-  }
-}
-
-- (void)collectMethods:(NSMutableDictionary *)methodMap
-            publicOnly:(jboolean)publicOnly {
-  CollectMethodsOrConstructors(self, methodMap, publicOnly, false);
-}
-
-- (IOSObjectArray *)getDeclaredConstructors {
-  NSMutableDictionary *methodMap = [NSMutableDictionary dictionary];
-  CollectMethodsOrConstructors(self, methodMap, false, true);
-  return [IOSObjectArray arrayWithNSArray:[methodMap allValues]
-                                     type:JavaLangReflectMethod_class_()];
-}
-
-- (IOSObjectArray *)getConstructors {
-  NSMutableDictionary *methodMap = [NSMutableDictionary dictionary];
-  CollectMethodsOrConstructors(self, methodMap, true, true);
-  return [IOSObjectArray arrayWithNSArray:[methodMap allValues]
-                                     type:JavaLangReflectMethod_class_()];
+                                                withJavaNetURL:nil
+                                       withJavaLangClassLoader:nil]);
 }
 
 - (jboolean)isEnum {
